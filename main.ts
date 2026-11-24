@@ -5,6 +5,14 @@ import { join } from 'node:path';
 // wrapping 32-bit arithmetic (Math.imul for MUL), signed and unsigned division kept apart,
 // shift counts masked to 5 bits, every trap in its own exit code, and the step and output
 // limits checked in the reference's order. Ends (halt, exit, trap) throw the exit code.
+// Decode table: immediate length per opcode, -1 for an invalid opcode. Built once so the
+// hot loop reads one entry instead of re-deriving the length and validity on every step.
+const DT = new Int8Array(256).fill(-1);
+for (let o = 0; o < 256; o++) {
+  if (o < 8 || (o >= 0x10 && o <= 0x1e) || (o >= 0x20 && o <= 0x22) || (o >= 0x30 && o <= 0x34) || o === 0x40 || o === 0x41 || (o >= 0x50 && o <= 0x53))
+    DT[o] = o === 1 ? 1 : o === 2 ? 4 : o >= 0x30 && o <= 0x33 ? 2 : 0;
+}
+
 function run(P, I) {
   const n = P.length;
   const D = new Int32Array(256);
@@ -17,8 +25,8 @@ function run(P, I) {
       if (steps === 1e6) throw 10;
       if (pc < 0 || pc >= n) throw 9;
       const op = P[pc];
-      const imm = op === 1 ? 1 : op === 2 ? 4 : op >= 0x30 && op <= 0x33 ? 2 : 0;
-      if (!(op < 8 || (op >= 0x10 && op <= 0x1e) || (op >= 0x20 && op <= 0x22) || (op >= 0x30 && op <= 0x34) || op === 0x40 || op === 0x41 || (op >= 0x50 && op <= 0x53))) throw 5;
+      const imm = DT[op];
+      if (imm < 0) throw 5;
       if (pc + imm >= n) throw 9;
       steps++;
       const nx = pc + 1 + imm;
